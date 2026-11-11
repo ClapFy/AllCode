@@ -1,0 +1,78 @@
+name: Android Release
+
+# Builds the AllCode Connect release APK and attaches it to a prerelease.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "android-v*"
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Release APK
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /apps/mobile/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ALLCODE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/allcode.keystore"
+            echo "ALLCODE_KEYSTORE=$RUNNER_TEMP/allcode.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ALLCODE_KEYSTORE_BASE64 is not set; the APK is signed with a debug key."
+          fi
+
+      - name: Test and build
+        env:
+          ALLCODE_KEYSTORE_PASSWORD: ${{ secrets.ALLCODE_KEYSTORE_PASSWORD }}
+          ALLCODE_KEY_ALIAS: ${{ secrets.ALLCODE_KEY_ALIAS }}
+          ALLCODE_KEY_PASSWORD: ${{ secrets.ALLCODE_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --console=plain
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/allcode-connect.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: allcode-connect-apk
+          path: ${{ runner.temp }}/allcode-connect.apk
+
+      - name: Attach to prerelease
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "AllCode Connect ${TAG#android-v}" --notes "Android build of AllCode Connect."
+          gh release upload "$TAG" "$RUNNER_TEMP/allcode-connect.apk" --clobber

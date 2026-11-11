@@ -22,6 +22,6 @@ export function decide(
     test_server: boolean;
     rust: boolean;
     release_smoke: boolean;
-    mobile_native: boolean;
+    android: boolean;
   };
 };

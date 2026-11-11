@@ -1,78 +1,39 @@
 ---
 name: test-t3-mobile
-description: Test T3 Code's native iOS and Android app through its Device panel and returned AgentDevice command. Use for mobile verification, native-client builds, Metro launch, and mobile pairing against isolated development state.
+description: Build, test, and verify AllCode Connect, the native Android app in apps/mobile, against an isolated T3 dev server. Use for mobile verification, protocol compatibility checks, and installing the app on a device.
 ---
 
-# Test T3 Mobile
+# Test AllCode Connect
 
-## Open the device
+`apps/mobile` is a Gradle project (Kotlin, Jetpack Compose). It speaks the T3 wire
+protocol itself, so server or contract changes can break it without any TypeScript error.
 
-Call `device_list`, then `device_open` with the selected host and device IDs.
-T3 boots the device and shows its live stream in the Device panel. Follow its
-returned `quickStart`, using the exact `agentDevice.command` and all `targetArgs`
-on every operation. Use `device_screenshot` to inspect the screen.
+## Build and unit-test
 
-If T3 device tools or the selected device are unavailable, report the blocker
-and stop verification. Do not install or switch to another automation system.
-
-## Use an isolated backend
-
-Reuse this task's healthy backend. Otherwise run `vp run dev` from the
-repository root, retain its terminal session, and read the actual backend port
-from the dev-runner output. Use the worktree's ignored `.t3` state. Never run
-against `~/.t3/userdata`. The Browser panel is not required for this workflow.
-
-Test with meaningful project and thread data. Read the shared
-[SQLite fixture reference](../test-t3-app/references/sqlite-fixtures.md) only
-when inspecting or seeding SQLite. Stop the test server before fixture writes.
-
-## Launch T3 Code Dev
-
-From the checkout being tested on the selected device host, run:
+From `apps/mobile`, with `JAVA_HOME` set to a JDK 17+ and `local.properties` naming the SDK:
 
 ```bash
-vp run mobile:install <ios|android> <device-id>
+./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain
 ```
 
-This installs the dev client for the checkout's native fingerprint: from the
-device, the local cache, or the shared cache in seconds, building once only
-when no machine has that fingerprint yet (5-15 minutes, logged to the file it
-names). The device id may be omitted when exactly one device is booted. It
-prints one JSON line; on failure it names the next command. Mobile verification
-includes that step unless the user prohibits it.
+The APK lands in `app/build/outputs/apk/debug/app-debug.apk` (package `com.allcode.connect.dev`).
+On small machines, run one Gradle task at a time and stop dev servers first.
 
-For a device you opened in an agent-device session elsewhere (a device pool,
-cloud, or remote host), run `vp run mobile:install <ios|android> --session <s>`
-from the directory you opened the session in. It installs the cached build into
-that session (`--abi arm64-v8a` for an ARM Android device; `--metro <url>` also
-opens it against Metro) and never builds.
+## Check the protocol against a real server
 
-Start `vp run dev:client` from `apps/mobile`, or reuse a healthy Metro belonging
-to this checkout. Open its printed development-client URL with AgentDevice
-`open com.t3tools.t3code.dev <url>` and all returned target arguments.
-The device must be able to reach both Metro and the isolated backend.
-Append `&disableAutoLaunch=1&disableFab=1` to the development-client URL query
-when developer chrome would obscure screenshots or taps; the SDK 58 dev client
-applies these preferences before the app loads.
-
-## Pair and verify
-
-Use the helper from the repository root, with the returned executable and target
-arguments stored in `agent_device_command` and the Bash array
-`agent_device_target_args`:
+1. Start an isolated dev server (`vp run dev:server`, with `--home-dir` outside a worktree).
+2. Mint a pairing token for it: `node apps/server/src/bin.ts pair --base-dir <that home> --ttl 1h`.
+3. Run the live test, which pairs, syncs the shell, launches a Replay (dev) thread, and
+   answers its approval:
 
 ```bash
-.agents/skills/test-t3-mobile/scripts/pair-client.sh \
-  <server-port> <base-dir> <device-reachable-backend-origin> \
-  "$agent_device_command" "${agent_device_target_args[@]}"
+T3_DEV_URL=http://127.0.0.1:<port> T3_DEV_TOKEN=<token> ./gradlew :app:testDebugUnitTest --tests 'com.allcode.connect.LiveServerTest'
 ```
 
-It issues a fresh credential and opens T3 Code Dev's existing pairing route
-through AgentDevice. For a backend on the device host, use
-`http://127.0.0.1:<server-port>` on iOS or `http://10.0.2.2:<server-port>`
-on Android. For a remote backend, use its reachable origin.
+Never point it at the user's live server or `~/.t3`.
 
-Confirm the intended projects appear, exercise the affected flow, and capture
-evidence. Retain the app and environment while iterating. At teardown, remove
-the disposable connection, close the AgentDevice session, call `device_close`,
-and stop only your backend and Metro processes.
+## On a device
+
+Install with `adb install -r app/build/outputs/apk/debug/app-debug.apk`. Pair through
+the app's QR scanner, a pasted pairing link, or an address plus code. Reach a dev server
+from the phone over the LAN or tailnet with `vp run dev --share`.

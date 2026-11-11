@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Usage limits from your connected machines</string>
+    <string name="channel_attention">Needs your attention</string>
+    <string name="channel_attention_description">An agent is waiting on an approval or a question</string>
+    <string name="channel_finished">Finished work</string>
+    <string name="channel_finished_description">An agent finished a turn</string>
+    <string name="channel_live">Live connection</string>
+    <string name="channel_live_description">Keeps your machines connected while agents work</string>
+</resources>

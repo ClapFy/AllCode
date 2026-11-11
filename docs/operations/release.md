@@ -311,47 +311,21 @@ and `VERCEL_ORG_ID` secrets. It also respects the optional `VERCEL_TEAM_SLUG`
 variable. The Vercel project's root directory must be `apps/marketing`.
 Git deployments remain disabled in `apps/marketing/vercel.ts`.
 
-## Mobile TestFlight and store releases
+## AllCode Connect (Android)
 
-Merges to main publish compatible OTAs and build iOS prereleases with the `testflight`
-profile at version `3.0.0`. Build numbers increment automatically. The committed app
-version remains the App Store release version; Android keeps using that version.
+The Android app in `apps/mobile` is a Gradle project outside the release train.
+`.github/workflows/android-release.yml` builds a release APK when run by hand or
+when an `android-v*` tag is pushed, and attaches it to a GitHub prerelease for
+that tag. Without signing secrets the APK is signed with the runner's debug key,
+which Android treats as a different app on every runner, so set these secrets
+before sharing builds:
 
-To release iOS, dispatch **Mobile EAS Production** with `mode=build`,
-`profile=production`, `platform=ios`, and the intended version, such as `2.0.1`.
-The workflow commits and pushes the version before building and uploading it.
-Select that build in App Store Connect for App Store review.
+- `ALLCODE_KEYSTORE_BASE64`: a base64-encoded keystore.
+- `ALLCODE_KEYSTORE_PASSWORD`, `ALLCODE_KEY_ALIAS`, `ALLCODE_KEY_PASSWORD`.
 
-To force a TestFlight rebuild, select `profile=testflight`, `platform=ios`, and
-leave the version blank. Submit the first `3.0.0` build for external beta review
-in App Store Connect. Later builds may still require review; uploads alone do
-not guarantee external approval. TestFlight builds expire after 90 days.
-
-Both release and TestFlight binaries receive compatible production-channel OTAs,
-separated by their major-version fingerprints. Manual `mode=update` uses the
-selected profile's version. Before releasing `3.0.0` to the App Store, advance
-`build.testflight.env.T3CODE_MOBILE_VERSION` in `apps/mobile/eas.json` to the next
-unreleased major and get its first beta build approved.
-
-## Android APK mirror
-
-`.github/workflows/mobile-android-apk.yml` checks the Google Play Alpha closed-testing
-track hourly. Each new beta gets one `android-beta-<build-number>` prerelease
-containing its APK. Unchanged checks publish nothing, and interrupted draft
-uploads resume on the next check.
-
-Normal Nightly releases include the newest processed internal-testing APK available
-when the release publishes. Internal builds do not create separate Android releases.
-If Play credentials or a processed APK are unavailable, or the download takes more
-than five minutes, the Nightly can still publish without an APK. Android submissions
-continue to go to internal testing; promote a build to Alpha to publish it as a beta.
-
-The APK is the universal APK Play generates and signs from the
-uploaded bundle, so no signing key lives in GitHub. The job skips itself until
-`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` holds a Play service account key with the "Release to
-production, exclude devices, and use Play App Signing" permission, which downloading generated
-APKs requires. The job reads tracks without opening a Play edit, so it can share the service
-account EAS Submit uses.
+Bump `versionName` and its derived `versionCode` in
+`apps/mobile/app/build.gradle.kts` before tagging. Android only updates an
+installed copy signed with the same key, and refuses a lower `versionCode`.
 
 ## Hosted web app release deployment
 

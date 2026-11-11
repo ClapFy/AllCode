@@ -28,7 +28,7 @@ T3 Code has 3 key app surfaces: **web**, **desktop**, and **mobile**.
 
 **Desktop** is the main surface most users install first. It's a full Electron app that bundles the server runner as well. The desktop app can also be used as the host server, allowing remote connections from app.t3.codes or the mobile app.
 
-**Mobile** is a React Native app for both iOS and Android, available on the App Store and Google Play. The mobile app allows for connecting to any T3 Code server to control work remotely.
+**Mobile** is AllCode Connect, a native Android app (Kotlin, Jetpack Compose) in `apps/mobile`. It implements the client side of the wire protocol itself and connects directly to any T3 Code server over the LAN or a tailnet; it uses neither Clerk nor the T3 Connect relay. See [Android app](docs/internals/android-app.md).
 
 ## A note from Theo
 
@@ -67,10 +67,10 @@ We need to be on the same page with terminology. When communicating, use this la
 The most common defect in this repo is a change that works on the path you tested and is missing everywhere else. Before calling frontend work done, walk this list and say which entries applied:
 
 - **Entry points.** A behavior reachable from the chat view is usually also reachable from Settings, the command palette, and a keybinding. Fixing one is not fixing the feature.
-- **Clients.** Web, desktop (wraps web, adds Electron shell/IPC), and mobile (React Native, separate navigation). Shared logic lives in `packages/client-runtime`
+- **Clients.** Web, desktop (wraps web, adds Electron shell/IPC), and mobile (native Kotlin, its own protocol client). Shared web and desktop logic lives in `packages/client-runtime`
 - **Providers.** Codex, Claude, Cursor, Grok, OpenCode, Antigravity, and Kiro each have an adapter. Provider-shaped features need a decision per adapter, even if the decision is "not supported here".
 - **Agents.** A capability a user can trigger is usually one an agent should reach through MCP tools, and scheduled tasks run the same paths. That only works when it is a service method, not handler code.
-- **Contracts.** Anything crossing the wire is typed in `packages/contracts`. Change the schema and the server, web, mobile, and desktop all follow.
+- **Contracts.** Anything crossing the wire is typed in `packages/contracts`. Change the schema and the server, web, and desktop follow; the Android app reads the wire format by hand, so check `apps/mobile` too.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Snooze needs unsnooze. Close needs reopen. A one-way door is a bug.
 - **Connection modes.** Local, remote/relay, and tunnel behave differently. Multi-device and multi-environment cases are real.
 - **Docs.** Check whether the change makes existing guidance inaccurate. Apply the [documentation rules](#documentation) before adding anything.
@@ -139,7 +139,7 @@ An empty database is a bad test. Seed your worktree's `.t3` with a copy of real 
 
 - Real agent turns cost money. To watch a turn stream through the pipeline and UI, use the free `Replay (dev)` provider that `vp run dev` registers; [test-t3-app](.agents/skills/test-t3-app/SKILL.md) shows how to start one. Use a real provider only when the change depends on that provider's behavior, and then pick its cheapest model, such as Haiku for Claude or Luna for Codex.
 
-For mobile verification, a missing or outdated native client is an install step, not a blocker. Run `vp run mobile:install <ios|android> [device-id]` on the device host before starting Metro; it targets the only booted simulator or connected Android device when the id is omitted. It installs the dev client for this checkout's native fingerprint from the shared cache in seconds and builds only when no machine has built it yet, so prefer it over `expo run:*`, `xcodebuild`, or `gradlew`, which rebuild from scratch. Its stdout is one JSON line; build output goes to the log it names. See `test-t3-mobile` for the full workflow.
+For mobile verification, build and test `apps/mobile` with Gradle and, for protocol or contract changes, run its `LiveServerTest` against an isolated dev server. The `test-t3-mobile` skill has the commands.
 
 ## Evals
 
@@ -183,10 +183,10 @@ Architecture and its constraints: `docs/internals/overview.md`. Glossary: `docs/
 ## Where code lives
 
 - `apps/server` - WebSocket, orchestration, providers, checkpointing. Effect-heavy: read [Effect services](docs/internals/effect-services.md) before adding server code, and `.repos/effect/LLMS.md` for the Effect library itself.
-- `apps/web` - React/Vite UI. `apps/desktop` wraps it, `apps/mobile` is React Native, `apps/marketing` is the site.
+- `apps/web` - React/Vite UI. `apps/desktop` wraps it, `apps/mobile` is the native Android app (Gradle, outside the pnpm workspace), `apps/marketing` is the site.
 - `packages/contracts` - Effect/Schema contracts plus small derived helpers. No heavy runtime logic.
 - `packages/shared` - shared runtime utils, subpath exports, no barrel.
-- `packages/client-runtime` - client code shared by web and mobile.
+- `packages/client-runtime` - client code shared by web and desktop.
 - `.repos/` - vendored read-only references. Prefer their patterns over invented ones. Never edit or import from them. Sync with `vpr sync:repos` when bumping the matching dependency. If it is missing (sparse checkout), read a file with `git show origin/main:.repos/<path>`.
 
 ## Taste

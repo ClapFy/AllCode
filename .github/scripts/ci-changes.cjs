@@ -12,16 +12,15 @@ const INERT = [
   /^LICENSE$/,
 ];
 
-// Shared test setup and vendored mobile dependencies affect every package.
+// Shared test setup affects every package.
 const RUNS_EVERYTHING = [
   /^packages\/shared\/src\/(HostProcess|testing\/(longTempDir|providerEnv))\.ts$/,
-  /^apps\/mobile\/deps\//,
 ];
 
 // Includes cross-package reads absent from package.json dependencies.
 const EXTRA_OWNERS = [
   // Vite configs and tsconfigs of these apps import scripts/lib directly.
-  [/^scripts\/lib\//, ["@t3tools/desktop", "@t3tools/mobile", "@t3tools/web", "t3"]],
+  [/^scripts\/lib\//, ["@t3tools/desktop", "@t3tools/web", "t3"]],
   // scripts/build-desktop-artifact.ts reads the GNOME extension manifest.
   [/^apps\/desktop\/gnome-extension\//, ["@t3tools/scripts"]],
   [/^native\/browser-secret\//, ["@t3tools/desktop"]],
@@ -37,19 +36,15 @@ const TEST_ONLY_DEPS = {
   // Evals import the server's source to test its real model-facing text.
   "@t3tools/evals": ["t3"],
   "@t3tools/provider-pi": ["@t3tools/client-runtime"],
-  "@t3tools/scripts": [
-    "@t3tools/desktop",
-    "@t3tools/mobile",
-    "@t3tools/web",
-    "t3",
-    "@t3tools/provider-cursor",
-  ],
+  "@t3tools/scripts": ["@t3tools/desktop", "@t3tools/web", "t3", "@t3tools/provider-cursor"],
 };
 // The server bundles the web build without importing it.
 const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
 
-const MOBILE_NATIVE =
-  /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$|^\.github\/scripts\/ci-changes\.cjs$|^\.github\/actions\/ci-changes\//;
+// The Android app is a Gradle project outside the pnpm workspace; only its own job reads it.
+const ANDROID_APP = /^apps\/mobile\//;
+const ANDROID =
+  /^apps\/mobile\/|^\.github\/workflows\/ci\.yml$|^\.github\/scripts\/ci-changes\.cjs$|^\.github\/actions\/ci-changes\//;
 
 const OWN_TEST_JOB = new Set(["t3", "@t3tools/web", "@t3tools/monorepo"]);
 
@@ -96,6 +91,7 @@ function readWorkspace() {
 function ownersOf(file, packages) {
   const extra = EXTRA_OWNERS.flatMap(([pattern, names]) => (pattern.test(file) ? names : []));
   if (INERT.some((pattern) => pattern.test(file))) return extra;
+  if (ANDROID_APP.test(file)) return extra;
   // A manifest can change dependencies or versions other packages read.
   if (path.posix.basename(file) === "package.json") return null;
   if (RUNS_EVERYTHING.some((pattern) => pattern.test(file))) return null;
@@ -164,7 +160,7 @@ function decide(files, packages, full) {
       test_server: has("t3"),
       rust: everything || rust,
       release_smoke: scriptsChanged,
-      mobile_native: files === null || files.some((file) => MOBILE_NATIVE.test(file)),
+      android: files === null || files.some((file) => ANDROID.test(file)),
     },
   };
 }
